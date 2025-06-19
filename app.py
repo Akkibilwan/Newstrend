@@ -1,7 +1,6 @@
 # app.py
 
-# Installation Requirements (see requirements.txt):
-# streamlit, keybert, snscrape, beautifulsoup4, googlenews, sentence-transformers, requests, aiohttp
+# Installation Requirements in requirements.txt
 
 import streamlit as st
 from GoogleNews import GoogleNews
