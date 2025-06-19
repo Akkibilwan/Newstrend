@@ -50,9 +50,7 @@ def extract_phrases_openai(headline: str) -> str:
             {"role": "system", "content": "{
   "role": "system",
   "content": (
-    "You are a phrase extractor. Given a specific news headline, extract a unique, natural-sounding keyphrase "
-    "that best represents the search term people would use on Twitter or Reddit to find this news. "
-    "Avoid generic phrases. Never repeat older examples. Only return the phrase without extra text or quotes."
+    "You are a phrase extractor. Given a specific news headline, extract a unique, natural-sounding keyphrase that best represents the search term people would use on Twitter or Reddit to find this news. Avoid generic phrases. Never repeat older examples. Only return the phrase without extra text or quotes."
   )
 }
 "},
