@@ -1,18 +1,17 @@
-# Installation Requirements:
-# pip install streamlit keybert snscrape beautifulsoup4 googlenews-python sentence-transformers
+# app.py
+
+# Installation Requirements (see requirements.txt):
+# streamlit, keybert, snscrape, beautifulsoup4, googlenews, sentence-transformers, requests, aiohttp
 
 import streamlit as st
 from GoogleNews import GoogleNews
 import snscrape.modules.twitter as sntwitter
 from keybert import KeyBERT
 import requests
-from bs4 import BeautifulSoup
 from typing import List, Dict
 
-# -------------------- Streamlit Config --------------------
+# -------------------- Streamlit UI Config --------------------
 st.set_page_config(page_title="Social Signal Bot", layout="wide")
-
-# -------------------- Sidebar --------------------
 st.sidebar.title("Social Signal Bot")
 topic = st.sidebar.text_input("Enter a news topic", value="technology")
 num_articles = st.sidebar.slider("Number of news articles", 1, 10, 5)
@@ -57,8 +56,7 @@ def scrape_reddit(keyword: str, max_results: int = 5) -> List[Dict[str, str]]:
     response = requests.get(url, headers=headers)
     posts = []
     if response.status_code == 200:
-        json_data = response.json()
-        for post in json_data.get("data", {}).get("children", []):
+        for post in response.json().get("data", {}).get("children", []):
             data = post.get("data", {})
             posts.append({
                 "title": data.get("title", ""),
@@ -66,11 +64,11 @@ def scrape_reddit(keyword: str, max_results: int = 5) -> List[Dict[str, str]]:
             })
     return posts
 
-# -------------------- Main Logic --------------------
+# -------------------- Main Execution --------------------
 if run:
     st.title("📡 Social Signal Bot")
-    st.subheader("🔍 Fetching News Headlines...")
 
+    st.subheader("🔍 Fetching News Headlines...")
     headlines = fetch_news(topic, num_articles)
     if not headlines:
         st.error("No headlines found.")
