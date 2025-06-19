@@ -1,23 +1,23 @@
-# requirements.txt
-# streamlit
-# openai
-# requests
-# googlenews
-# python-dotenv
-# pandas
 
 import streamlit as st
 import requests
 from datetime import datetime, timedelta
 from GoogleNews import GoogleNews
-import openai
+from openai import OpenAI  # Import the new OpenAI class
 import os
 import json
-import pandas as pd # Import pandas
+import pandas as pd
 
-# Load OpenAI API Key from secrets
-openai.api_key = st.secrets["OPENAI_API_KEY"]
-APIFY_TOKEN = st.secrets["APIFY_API_TOKEN"]
+# --- Initialize Clients ---
+# Load secrets and initialize the OpenAI client once
+# This is more efficient than setting the API key on every function call
+try:
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    APIFY_TOKEN = st.secrets["APIFY_API_TOKEN"]
+except KeyError as e:
+    st.error(f"Could not find secret: {e}. Please check your .streamlit/secrets.toml file.")
+    st.stop()
+
 
 # ---------- Utility Functions ----------
 
@@ -27,6 +27,7 @@ def fetch_news(topic: str, num_articles: int):
     result = googlenews.results(sort=True)
     return result[:num_articles]
 
+# --- UPDATED FUNCTION ---
 def extract_phrase_with_openai(headline: str):
     prompt = f"""
     Extract a concise, human-searchable phrase from this news headline:
@@ -34,13 +35,19 @@ def extract_phrase_with_openai(headline: str):
     Only return the phrase. Do not include quotes or extra text.
     """
     try:
-        response = openai.ChatCompletion.create(
+        # Use the new syntax: client.chat.completions.create
+        response = client.chat.completions.create(
             model="gpt-3.5-turbo",
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
         )
-        return response.choices[0].message['content'].strip()
+        # The response structure has also changed slightly
+        return response.choices[0].message.content.strip()
     except Exception as e:
+        # It's helpful to print the actual error to the console for debugging
+        print(f"Error calling OpenAI: {e}")
+        # Optionally, display a more specific error in the UI
+        st.warning(f"Could not generate phrase due to an API error: {e}")
         return "Could not generate phrase"
 
 def fetch_tweets_from_apify(phrase):
@@ -53,7 +60,6 @@ def fetch_tweets_from_apify(phrase):
     }
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=120)
-        # A 200 or 201 status code from this endpoint indicates success
         if response.status_code in [200, 201]:
             return response.json()
         else:
@@ -115,30 +121,28 @@ if run_bot:
             phrase = extract_phrase_with_openai(headline)
             st.markdown(f"**🔑 Phrase:** `{phrase}`")
 
-            with st.expander("🔍 Twitter Data & Virality"):
-                with st.spinner(f"Searching for tweets about '{phrase}'..."):
-                    tweets = fetch_tweets_from_apify(phrase)
-                    score, label = compute_virality_score(tweets)
-                    st.markdown(f"**Virality Score:** {score}/100 ({label})")
+            # Only proceed if a phrase was successfully generated
+            if phrase != "Could not generate phrase":
+                with st.expander("🔍 Twitter Data & Virality"):
+                    with st.spinner(f"Searching for tweets about '{phrase}'..."):
+                        tweets = fetch_tweets_from_apify(phrase)
+                        score, label = compute_virality_score(tweets)
+                        st.markdown(f"**Virality Score:** {score}/100 ({label})")
 
-                    if tweets:
-                        # Process data for the DataFrame
-                        processed_tweets = []
-                        for tweet in tweets:
-                            if isinstance(tweet, dict):
-                                processed_tweets.append({
-                                    "Tweet": tweet.get("text", "N/A"),
-                                    "Author": tweet.get("author", {}).get("userName", "N/A"),
-                                    "Views": tweet.get("viewCount", 0),
-                                    "Likes": tweet.get("likeCount", 0),
-                                    "Retweets": tweet.get("retweetCount", 0),
-                                    "URL": tweet.get("url", "N/A")
-                                })
-                        
-                        # Create a pandas DataFrame
-                        df = pd.DataFrame(processed_tweets)
-                        
-                        # Display the DataFrame in the Streamlit app
-                        st.dataframe(df, use_container_width=True)
-                    else:
-                        st.info("No tweets found or an error occurred while fetching data.")
+                        if tweets:
+                            processed_tweets = []
+                            for tweet in tweets:
+                                if isinstance(tweet, dict):
+                                    processed_tweets.append({
+                                        "Tweet": tweet.get("text", "N/A"),
+                                        "Author": tweet.get("author", {}).get("userName", "N/A"),
+                                        "Views": tweet.get("viewCount", 0),
+                                        "Likes": tweet.get("likeCount", 0),
+                                        "Retweets": tweet.get("retweetCount", 0),
+                                        "URL": tweet.get("url", "N/A")
+                                    })
+                            
+                            df = pd.DataFrame(processed_tweets)
+                            st.dataframe(df, use_container_width=True)
+                        else:
+                            st.info("No tweets found or an error occurred while fetching data.")
