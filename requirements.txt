@@ -2,5 +2,5 @@ streamlit
 keybert
 googlenews
 sentence-transformers
+openai
 requests
-snscrape
