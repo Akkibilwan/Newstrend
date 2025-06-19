@@ -1,13 +1,9 @@
-import platform
-import streamlit as st
-st.info(f"Running on Python {platform.python_version()}")
-
 import streamlit as st
 from GoogleNews import GoogleNews
 from keybert import KeyBERT
-import snscrape.modules.twitter as sntwitter
 import requests
-from datetime import datetime, timedelta
+from datetime import datetime
+import openai
 from typing import List, Dict
 
 st.set_page_config(page_title="News Virality Analyzer", layout="wide")
@@ -50,44 +46,44 @@ def extract_phrases(_kw_model, headlines: List[str]) -> Dict[str, List[str]]:
             stop_words='english',
             use_mmr=True,
             diversity=0.7,
-            top_n=3
+            top_n=2
         )]
         result[title] = phrases
     return result
 
-# -------------------- Twitter Search --------------------
-def check_twitter_virality(phrase: str) -> int:
-    count = 0
-    threshold = 50000  # impressions
-    now = datetime.utcnow()
-    min_date = now - timedelta(days=4)
-    try:
-        for tweet in sntwitter.TwitterSearchScraper(f'{phrase} since:{min_date.date()}').get_items():
-            if hasattr(tweet, 'viewCount') and tweet.viewCount and tweet.viewCount > threshold:
-                count += 1
-            if count >= 3:
-                break
-    except:
-        return 0
-    return min(count * 30, 100)  # max 90 from Twitter
+# -------------------- OpenAI-powered Virality Estimator --------------------
+def estimate_virality_with_openai(phrase: str) -> Dict[str, int]:
+    openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-# -------------------- Reddit Search --------------------
-def check_reddit_virality(phrase: str) -> int:
+    prompt = f"""
+You are a social listening analyst. Based on public data, estimate the virality of the phrase below:
+
+Phrase: "{phrase}"
+Time window: last 4 days
+Platforms: Twitter and Reddit
+
+Return a JSON object like:
+{{
+  "twitter_score": 0–100 (based on impressions, tweet count, recency),
+  "reddit_score": 0–100 (based on upvotes, post count, recency),
+  "reason": "Brief explanation of why this score was given"
+}}
+
+Respond ONLY with the JSON object.
+"""
+
     try:
-        url = f"https://www.reddit.com/search.json?q={requests.utils.quote(phrase)}&limit=10&sort=new"
-        headers = {"User-Agent": "Mozilla/5.0"}
-        resp = requests.get(url, headers=headers, timeout=10)
-        posts = resp.json().get("data", {}).get("children", [])
-        score = 0
-        for post in posts:
-            data = post.get("data", {})
-            created_utc = datetime.utcfromtimestamp(data.get("created_utc", 0))
-            if (datetime.utcnow() - created_utc).days <= 4:
-                if data.get("score", 0) > 2000:
-                    score += 1
-        return min(score * 35, 100)  # max 100 from Reddit
-    except:
-        return 0
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.4,
+            max_tokens=200
+        )
+        text = response.choices[0].message.content.strip()
+        return eval(text) if text.startswith("{") else {"twitter_score": 0, "reddit_score": 0, "reason": "Parsing failed"}
+    except Exception as e:
+        st.warning(f"OpenAI error for '{phrase}': {e}")
+        return {"twitter_score": 0, "reddit_score": 0, "reason": "API error"}
 
 # -------------------- Scoring --------------------
 def compute_virality(t_score: int, r_score: int) -> Dict:
@@ -108,32 +104,36 @@ if run:
         st.stop()
     st.success(f"Fetched {len(headlines)} headlines")
 
-    st.subheader("🔍 Step 2: Extracting Phrases...")
+    st.subheader("🔍 Step 2: Extracting Searchable Phrases...")
     kw_model = load_keybert()
     phrase_dict = extract_phrases(_kw_model=kw_model, headlines=headlines)
 
-    st.subheader("📊 Step 3: Computing Virality...")
+    st.subheader("🧠 Step 3: Estimating Virality with OpenAI")
     for title in headlines:
         phrases = phrase_dict.get(title, [])
         twitter_score = 0
         reddit_score = 0
+        reason = "No signals detected"
 
         for phrase in phrases:
-            twitter_score = max(twitter_score, check_twitter_virality(phrase))
-            reddit_score = max(reddit_score, check_reddit_virality(phrase))
+            result = estimate_virality_with_openai(phrase)
+            twitter_score = max(twitter_score, result.get("twitter_score", 0))
+            reddit_score = max(reddit_score, result.get("reddit_score", 0))
+            reason = result.get("reason", "")
 
-        result = compute_virality(twitter_score, reddit_score)
+        final = compute_virality(twitter_score, reddit_score)
 
         with st.container():
             st.markdown(f"### 🗞️ {title}")
             st.markdown(f"**Key Phrases:** `{', '.join(phrases)}`")
+            st.markdown(f"**Explanation:** {reason}")
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric(label="🐦 Twitter Score", value=twitter_score)
             with col2:
                 st.metric(label="👽 Reddit Score", value=reddit_score)
             with col3:
-                st.metric(label="🔥 Overall", value=result['label'])
+                st.metric(label="🔥 Overall", value=final['label'])
             st.markdown("---")
 
     st.balloons()
