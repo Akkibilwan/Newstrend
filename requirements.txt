@@ -1,0 +1,7 @@
+streamlit
+keybert
+snscrape
+beautifulsoup4
+googlenews-python
+sentence-transformers
+requests
