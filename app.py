@@ -32,8 +32,15 @@ def get_kw_model():
 def extract_keywords(_kw_model, texts: List[str], top_n: int = 5) -> Dict[str, List[str]]:
     keywords_dict = {}
     for title in texts:
-        keywords = [kw[0] for kw in _kw_model.extract_keywords(title, top_n=top_n)]
-        keywords_dict[title] = keywords
+        phrases = [kw[0] for kw in _kw_model.extract_keywords(
+            title,
+            keyphrase_ngram_range=(1, 3),  # allow phrases of 1 to 3 words
+            stop_words='english',
+            use_maxsum=True,
+            nr_candidates=20,
+            top_n=top_n
+        )]
+        keywords_dict[title] = phrases
     return keywords_dict
 
 @st.cache_data
@@ -51,12 +58,12 @@ def scrape_reddit(keyword: str, max_results: int = 5) -> List[Dict[str, str]]:
             })
     return posts
 
-# Safe Twitter Scraper Loader
+# Twitter safely wrapped to avoid crash
 def safe_scrape_tweets(keyword: str, max_results: int = 5) -> List[Dict[str, str]]:
     try:
         import snscrape.modules.twitter as sntwitter
         tweets = []
-        for i, tweet in enumerate(sntwitter.TwitterSearchScraper(f"{keyword} lang:en").get_items()):
+        for i, tweet in enumerate(sntwitter.TwitterSearchScraper(f'"{keyword}" lang:en').get_items()):
             if i >= max_results:
                 break
             tweets.append({
@@ -77,16 +84,16 @@ if run:
         st.stop()
     st.success(f"Fetched {len(headlines)} headlines")
 
-    st.subheader("🧠 Extracting Keywords")
+    st.subheader("🧠 Extracting Key Phrases")
     kw_model = get_kw_model()
     keywords_dict = extract_keywords(_kw_model=kw_model, texts=headlines)
-    all_keywords = list({kw for kws in keywords_dict.values() for kw in kws})
-    st.success(f"Extracted {len(all_keywords)} unique keywords")
+    all_phrases = list({phrase for phrases in keywords_dict.values() for phrase in phrases})
+    st.success(f"Extracted {len(all_phrases)} unique phrases")
 
-    with st.expander("📰 Headlines & Keywords", expanded=True):
-        for title, keywords in keywords_dict.items():
+    with st.expander("📰 Headlines & Key Phrases", expanded=True):
+        for title, phrases in keywords_dict.items():
             st.markdown(f"**Headline:** {title}")
-            st.markdown(f"`Keywords:` {', '.join(keywords)}`")
+            st.markdown(f"`Phrases:` {', '.join(phrases)}`")
             st.markdown("---")
 
     st.subheader("📲 Social Signals")
@@ -94,9 +101,9 @@ if run:
     tabs = st.tabs(["Twitter", "Reddit"])
 
     with tabs[0]:
-        for kw in all_keywords:
-            with st.expander(f"🐦 Tweets for: {kw}"):
-                tweets = safe_scrape_tweets(kw)
+        for phrase in all_phrases:
+            with st.expander(f"🐦 Tweets for: {phrase}"):
+                tweets = safe_scrape_tweets(phrase)
                 if not tweets:
                     st.info("No tweets found.")
                     continue
@@ -104,9 +111,9 @@ if run:
                     st.markdown(f"- **@{t['username']}**: {t['content']}")
 
     with tabs[1]:
-        for kw in all_keywords:
-            with st.expander(f"👽 Reddit Posts for: {kw}"):
-                posts = scrape_reddit(kw)
+        for phrase in all_phrases:
+            with st.expander(f"👽 Reddit Posts for: {phrase}"):
+                posts = scrape_reddit(phrase)
                 if not posts:
                     st.info("No Reddit posts found.")
                     continue
