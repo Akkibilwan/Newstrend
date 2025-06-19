@@ -1,3 +1,7 @@
+import platform
+import streamlit as st
+st.info(f"Running on Python {platform.python_version()}")
+
 import streamlit as st
 from GoogleNews import GoogleNews
 from keybert import KeyBERT
