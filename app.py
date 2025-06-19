@@ -47,7 +47,15 @@ def extract_phrases_openai(headline: str) -> str:
     data = {
         "model": "gpt-4",
         "messages": [
-            {"role": "system", "content": "Extract a single, short, natural-sounding phrase from the news headline that could be searched on Twitter or Reddit."},
+            {"role": "system", "content": "{
+  "role": "system",
+  "content": (
+    "You are a phrase extractor. Given a specific news headline, extract a unique, natural-sounding keyphrase "
+    "that best represents the search term people would use on Twitter or Reddit to find this news. "
+    "Avoid generic phrases. Never repeat older examples. Only return the phrase without extra text or quotes."
+  )
+}
+"},
             {"role": "user", "content": headline}
         ]
     }
