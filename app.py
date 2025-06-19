@@ -34,10 +34,10 @@ def extract_keywords(_kw_model, texts: List[str], top_n: int = 5) -> Dict[str, L
     for title in texts:
         phrases = [kw[0] for kw in _kw_model.extract_keywords(
             title,
-            keyphrase_ngram_range=(1, 3),  # allow phrases of 1 to 3 words
+            keyphrase_ngram_range=(2, 4),     # ✅ longer, meaningful phrases
             stop_words='english',
-            use_maxsum=True,
-            nr_candidates=20,
+            use_mmr=True,                     # ✅ better diversity & relevance
+            diversity=0.7,
             top_n=top_n
         )]
         keywords_dict[title] = phrases
@@ -46,24 +46,27 @@ def extract_keywords(_kw_model, texts: List[str], top_n: int = 5) -> Dict[str, L
 @st.cache_data
 def scrape_reddit(keyword: str, max_results: int = 5) -> List[Dict[str, str]]:
     headers = {"User-Agent": "Mozilla/5.0"}
-    url = f"https://www.reddit.com/search.json?q={keyword}&limit={max_results}"
-    response = requests.get(url, headers=headers)
-    posts = []
-    if response.status_code == 200:
-        for post in response.json().get("data", {}).get("children", []):
-            data = post.get("data", {})
-            posts.append({
-                "title": data.get("title", ""),
-                "subreddit": data.get("subreddit", "")
-            })
-    return posts
+    url = f"https://www.reddit.com/search.json?q={requests.utils.quote(keyword)}&limit={max_results}&sort=new"
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        posts = []
+        if response.status_code == 200:
+            for post in response.json().get("data", {}).get("children", []):
+                data = post.get("data", {})
+                posts.append({
+                    "title": data.get("title", ""),
+                    "subreddit": data.get("subreddit", "")
+                })
+        return posts
+    except Exception as e:
+        st.warning(f"⚠️ Reddit error for '{keyword}': {e}")
+        return []
 
-# Twitter safely wrapped to avoid crash
 def safe_scrape_tweets(keyword: str, max_results: int = 5) -> List[Dict[str, str]]:
     try:
         import snscrape.modules.twitter as sntwitter
         tweets = []
-        for i, tweet in enumerate(sntwitter.TwitterSearchScraper(f'"{keyword}" lang:en').get_items()):
+        for i, tweet in enumerate(sntwitter.TwitterSearchScraper(f'{keyword} lang:en').get_items()):
             if i >= max_results:
                 break
             tweets.append({
@@ -72,7 +75,7 @@ def safe_scrape_tweets(keyword: str, max_results: int = 5) -> List[Dict[str, str
             })
         return tweets
     except Exception as e:
-        st.warning(f"⚠️ Could not load tweets for '{keyword}': {e}")
+        st.warning(f"⚠️ Twitter error for '{keyword}': {e}")
         return []
 
 # -------------------- Main Execution --------------------
@@ -84,7 +87,7 @@ if run:
         st.stop()
     st.success(f"Fetched {len(headlines)} headlines")
 
-    st.subheader("🧠 Extracting Key Phrases")
+    st.subheader("🧠 Extracting Searchable Phrases")
     kw_model = get_kw_model()
     keywords_dict = extract_keywords(_kw_model=kw_model, texts=headlines)
     all_phrases = list({phrase for phrases in keywords_dict.values() for phrase in phrases})
