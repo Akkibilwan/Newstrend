@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from GoogleNews import GoogleNews
 import openai
 import os
+import json
 
 # Load OpenAI API Key from secrets
 openai.api_key = st.secrets["OPENAI_API_KEY"]
@@ -43,12 +44,25 @@ def extract_phrase_with_openai(headline: str):
 def fetch_tweets_from_apify(phrase):
     url = f"https://api.apify.com/v2/acts/kaitoeasyapi~twitter-x-data-tweet-scraper-pay-per-result-cheapest/run-sync-get-dataset-items?token={APIFY_TOKEN}"
     payload = {
-        "twitterContent": phrase
+        "twitterContent": [phrase]
+    }
+    headers = {
+        "Content-Type": "application/json"
     }
     try:
-        response = requests.post(url, json=payload, timeout=120)
+        response = requests.post(url, json=payload, headers=headers, timeout=120)
         if response.status_code == 200:
-            return response.json()
+            # The Apify actor returns a list of JSON objects, where each object might contain the actual tweet data.
+            # We need to parse the response text which is a JSON string representing a list.
+            try:
+                # The response is a JSON string that needs to be parsed
+                data = response.json()
+                # The actual tweets are often nested, so we look for a common key like 'text' or 'user' to identify tweet objects.
+                # In this actor's case, the list of tweets is the direct response.
+                return data
+            except json.JSONDecodeError:
+                st.error("Failed to decode JSON from Apify response.")
+                return []
         else:
             st.error(f"Error {response.status_code}: {response.text}")
             return []
@@ -60,8 +74,14 @@ def compute_virality_score(tweets):
     if not tweets:
         return 0, "Low"
 
-    total_impressions = sum(tweet.get("viewCount", 0) for tweet in tweets)
-    max_impressions = max(tweet.get("viewCount", 0) for tweet in tweets)
+    total_impressions = sum(tweet.get("viewCount", 0) for tweet in tweets if isinstance(tweet, dict))
+    
+    # Ensure there are tweets with viewCount before finding the max
+    view_counts = [tweet.get("viewCount", 0) for tweet in tweets if isinstance(tweet, dict) and "viewCount" in tweet]
+    if not view_counts:
+        max_impressions = 0
+    else:
+        max_impressions = max(view_counts)
 
     if max_impressions > 50000:
         score = 90
@@ -111,7 +131,7 @@ if run_bot:
                         "Likes": tweet.get("likeCount", 0),
                         "Retweets": tweet.get("retweetCount", 0),
                         "URL": tweet.get("url", "")
-                    } for tweet in tweets]
+                    } for tweet in tweets if isinstance(tweet, dict)]
                     st.write(tweet_table)
                 else:
                     st.info("No tweets found or error fetching data.")
