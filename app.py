@@ -29,10 +29,10 @@ def get_kw_model():
     return KeyBERT()
 
 @st.cache_data
-def extract_keywords(texts: List[str], kw_model, top_n: int = 5) -> Dict[str, List[str]]:
+def extract_keywords(_kw_model, texts: List[str], top_n: int = 5) -> Dict[str, List[str]]:
     keywords_dict = {}
     for title in texts:
-        keywords = [kw[0] for kw in kw_model.extract_keywords(title, top_n=top_n)]
+        keywords = [kw[0] for kw in _kw_model.extract_keywords(title, top_n=top_n)]
         keywords_dict[title] = keywords
     return keywords_dict
 
@@ -68,7 +68,7 @@ def safe_scrape_tweets(keyword: str, max_results: int = 5) -> List[Dict[str, str
         st.warning(f"⚠️ Could not load tweets for '{keyword}': {e}")
         return []
 
-# -------------------- Execution --------------------
+# -------------------- Main Execution --------------------
 if run:
     st.subheader("🔍 Fetching News")
     headlines = fetch_news(topic, num_articles)
@@ -79,14 +79,14 @@ if run:
 
     st.subheader("🧠 Extracting Keywords")
     kw_model = get_kw_model()
-    keywords_dict = extract_keywords(headlines, kw_model)
+    keywords_dict = extract_keywords(_kw_model=kw_model, texts=headlines)
     all_keywords = list({kw for kws in keywords_dict.values() for kw in kws})
     st.success(f"Extracted {len(all_keywords)} unique keywords")
 
     with st.expander("📰 Headlines & Keywords", expanded=True):
         for title, keywords in keywords_dict.items():
             st.markdown(f"**Headline:** {title}")
-            st.markdown(f"`Keywords:` {', '.join(keywords)}")
+            st.markdown(f"`Keywords:` {', '.join(keywords)}`")
             st.markdown("---")
 
     st.subheader("📲 Social Signals")
