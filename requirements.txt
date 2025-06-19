@@ -1,8 +1,5 @@
 streamlit
 keybert
-snscrape
-beautifulsoup4
 googlenews
 sentence-transformers
 requests
-aiohttp
