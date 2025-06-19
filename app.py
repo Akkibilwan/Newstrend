@@ -46,21 +46,25 @@ def extract_phrases_openai(headline: str) -> str:
     }
     data = {
         "model": "gpt-4",
+        "temperature": 0.7,
         "messages": [
-            {"role": "system", "content": "{
- {
-  "role": "system",
-  "content": (
-    "You are a phrase extractor. Given a specific news headline, extract a unique, natural-sounding keyphrase "
-    "that best represents the search term people would use on Twitter or Reddit to find this news. "
-    "Avoid generic phrases. Never repeat older examples. Only return the phrase without extra text or quotes.")
-"},
-            {"role": "user", "content": headline}
+            {
+                "role": "system",
+                "content": (
+                    "You are a phrase extractor. Given a specific news headline, extract a unique, natural-sounding keyphrase "
+                    "that best represents the search term people would use on Twitter or Reddit to find this news. "
+                    "Avoid generic phrases. Never repeat older examples. Only return the phrase without extra text or quotes."
+                )
+            },
+            {
+                "role": "user",
+                "content": f"Headline: {headline}"
+            }
         ]
     }
     resp = requests.post("https://api.openai.com/v1/chat/completions", json=data, headers=headers)
     if resp.status_code == 200:
-        return resp.json()['choices'][0]['message']['content'].strip('"')
+        return resp.json()['choices'][0]['message']['content'].strip('\"')
     else:
         return ""
 
