@@ -42,30 +42,31 @@ def extract_phrase_with_openai(headline: str):
         return "Could not generate phrase"
 
 def fetch_tweets_from_apify(phrase):
+    # The URL for running the actor and getting dataset items synchronously
     url = f"https://api.apify.com/v2/acts/kaitoeasyapi~twitter-x-data-tweet-scraper-pay-per-result-cheapest/run-sync-get-dataset-items?token={APIFY_TOKEN}"
+    
+    # CORRECTED PAYLOAD: The API expects twitterContent to be a string.
     payload = {
-        "twitterContent": [phrase]
+        "twitterContent": phrase 
     }
+    
     headers = {
         "Content-Type": "application/json"
     }
+    
     try:
+        # Make the POST request to the Apify API
         response = requests.post(url, json=payload, headers=headers, timeout=120)
+        
+        # Check if the request was successful
         if response.status_code == 200:
-            # The Apify actor returns a list of JSON objects, where each object might contain the actual tweet data.
-            # We need to parse the response text which is a JSON string representing a list.
-            try:
-                # The response is a JSON string that needs to be parsed
-                data = response.json()
-                # The actual tweets are often nested, so we look for a common key like 'text' or 'user' to identify tweet objects.
-                # In this actor's case, the list of tweets is the direct response.
-                return data
-            except json.JSONDecodeError:
-                st.error("Failed to decode JSON from Apify response.")
-                return []
+            # The .json() method will parse the JSON response body into a Python list
+            return response.json()
         else:
+            # Display the specific error message from the API if available
             st.error(f"Error {response.status_code}: {response.text}")
             return []
+            
     except Exception as e:
         st.error(f"API Request Failed: {e}")
         return []
@@ -74,10 +75,14 @@ def compute_virality_score(tweets):
     if not tweets:
         return 0, "Low"
 
-    total_impressions = sum(tweet.get("viewCount", 0) for tweet in tweets if isinstance(tweet, dict))
+    # Ensure all items in tweets are dictionaries before processing
+    valid_tweets = [t for t in tweets if isinstance(t, dict)]
+    if not valid_tweets:
+        return 0, "Low"
+
+    total_impressions = sum(tweet.get("viewCount", 0) for tweet in valid_tweets)
     
-    # Ensure there are tweets with viewCount before finding the max
-    view_counts = [tweet.get("viewCount", 0) for tweet in tweets if isinstance(tweet, dict) and "viewCount" in tweet]
+    view_counts = [tweet.get("viewCount", 0) for tweet in valid_tweets if "viewCount" in tweet]
     if not view_counts:
         max_impressions = 0
     else:
@@ -120,18 +125,20 @@ if run_bot:
             st.markdown(f"**🔑 Phrase:** `{phrase}`")
 
             with st.expander("🔍 Twitter Data & Virality"):
-                tweets = fetch_tweets_from_apify(phrase)
-                score, label = compute_virality_score(tweets)
-                st.markdown(f"**Virality Score:** {score}/100 ({label})")
+                # Use a spinner to show that data is being fetched
+                with st.spinner(f"Searching for tweets about '{phrase}'..."):
+                    tweets = fetch_tweets_from_apify(phrase)
+                    score, label = compute_virality_score(tweets)
+                    st.markdown(f"**Virality Score:** {score}/100 ({label})")
 
-                if tweets:
-                    tweet_table = [{
-                        "Tweet": tweet.get("text", ""),
-                        "Views": tweet.get("viewCount", 0),
-                        "Likes": tweet.get("likeCount", 0),
-                        "Retweets": tweet.get("retweetCount", 0),
-                        "URL": tweet.get("url", "")
-                    } for tweet in tweets if isinstance(tweet, dict)]
-                    st.write(tweet_table)
-                else:
-                    st.info("No tweets found or error fetching data.")
+                    if tweets:
+                        tweet_table = [{
+                            "Tweet": tweet.get("text", ""),
+                            "Views": tweet.get("viewCount", 0),
+                            "Likes": tweet.get("likeCount", 0),
+                            "Retweets": tweet.get("retweetCount", 0),
+                            "URL": tweet.get("url", "")
+                        } for tweet in tweets if isinstance(tweet, dict)]
+                        st.write(tweet_table)
+                    else:
+                        st.info("No tweets found or an error occurred while fetching data.")
