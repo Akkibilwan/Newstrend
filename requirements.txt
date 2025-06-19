@@ -3,3 +3,4 @@ keybert
 googlenews
 sentence-transformers
 requests
+snscrape
