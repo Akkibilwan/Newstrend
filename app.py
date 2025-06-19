@@ -3,6 +3,7 @@
 # openai
 # requests
 # googlenews
+# pandas
 
 # ----------------------- .streamlit/secrets.toml -----------------------
 # [default]
@@ -13,6 +14,7 @@
 import streamlit as st
 import requests
 from datetime import datetime
+import pandas as pd
 
 # Load secrets
 openai_key = st.secrets["OPENAI_API_KEY"]
@@ -62,7 +64,7 @@ def fetch_news(topic: str, num_articles: int):
 
 # ---- Fetch tweets from Apify Actor ----
 @st.cache_data(show_spinner=False)
-def fetch_twitter_data_from_apify(phrase):
+def fetch_twitter_data_raw(phrase):
     url = "https://api.apify.com/v2/acts/kaitoeasyapi~twitter-x-data-tweet-scraper-pay-per-result-cheapest/run-sync-get-dataset-items"
     try:
         response = requests.post(
@@ -72,25 +74,16 @@ def fetch_twitter_data_from_apify(phrase):
         )
         if response.status_code != 200:
             return []
-        data = response.json()
-        return [
-            {
-                "text": item.get("text", ""),
-                "url": item.get("url", "#"),
-                "views": item.get("viewCount", 0),
-                "likes": item.get("likeCount", 0),
-                "retweets": item.get("retweetCount", 0)
-            }
-            for item in data if isinstance(item, dict)
-        ]
-    except:
+        return response.json()
+    except Exception as e:
+        st.error(f"Error contacting Apify: {e}")
         return []
 
-# ---- Compute Twitter Virality ----
-def get_twitter_virality_score(tweets):
-    if not tweets:
+# ---- Compute Twitter Virality Score ----
+def compute_twitter_virality(df):
+    if df.empty or "viewCount" not in df.columns:
         return 0, "Low"
-    max_views = max(t["views"] for t in tweets)
+    max_views = df["viewCount"].max()
     if max_views >= 100_000:
         return 90, "High"
     elif max_views >= 50_000:
@@ -109,16 +102,13 @@ if run_bot:
         phrase = extract_search_phrase_openai(article["title"])
         st.markdown(f"- 🔑 **Phrase:** `{phrase}`")
 
-        twitter_posts = fetch_twitter_data_from_apify(phrase)
-        score, label = get_twitter_virality_score(twitter_posts)
+        twitter_json = fetch_twitter_data_raw(phrase)
 
-        st.markdown(f"- 🟢 **Twitter Virality Score**: `{score}/100` – **{label}**")
-
-        if twitter_posts:
-            with st.expander("🔍 View Tweets"):
-                for t in twitter_posts:
-                    st.markdown(f"**•** {t['text']}")
-                    st.markdown(f"   - 👁️ Views: `{t['views']}`, ❤️ Likes: `{t['likes']}`, 🔁 Retweets: `{t['retweets']}`")
-                    st.markdown(f"   - 🔗 [Tweet Link]({t['url']})")
-        else:
-            st.info("No tweets found for this phrase.")
+        with st.expander("🔍 Raw Tweet Data from Apify"):
+            if isinstance(twitter_json, list) and twitter_json:
+                df = pd.DataFrame(twitter_json)
+                st.dataframe(df)
+                score, level = compute_twitter_virality(df)
+                st.success(f"📊 Twitter Virality Score: **{score}/100** ({level})")
+            else:
+                st.warning("No tweet data received from Apify.")
