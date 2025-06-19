@@ -2,5 +2,5 @@ streamlit
 keybert
 googlenews
 sentence-transformers
-openai
+openai==0.28.1
 requests
